@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 import tiktoken
+from tqdm import tqdm
 
 # Function to install a package using pip
 def install_package(package_name):
@@ -13,30 +14,34 @@ def install_package(package_name):
         print(f"Failed to install {package_name}. Error: {e}")
         sys.exit(1)
 
-# Check if tiktoken is installed, and install it if not
-try:
+# Check for required packages
+required_packages = ['tiktoken', 'tqdm']
+for package in required_packages:
+    try:
+        __import__(package)
+    except ImportError:
+        print(f"{package} library not found. Installing...")
+        install_package(package)
     import tiktoken
-except ImportError:
-    print("tiktoken library not found. Installing...")
-    install_package('tiktoken')
-    import tiktoken  # Try importing again after installation
 
 # Define file extensions to be excluded from content extraction
-EXCLUDED_EXTENSIONS = {'.exe', '.dll', '.bin', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.ico', '.svg'}
-EXCLUDED_DIRECTORIES = {'.git', '.github', '.idea'}
+EXCLUDED_EXTENSIONS = {'.exe', '.dll', '.bin', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.ico', '.svg', '.pyc', '.pyo'}
+EXCLUDED_DIRECTORIES = {'.git', '.github', '.idea', '__pycache__', 
+    'node_modules', 'venv', 'env'}
+    
 
 # Initialize tokenizer from tiktoken library
-tokenizer = tiktoken.get_encoding('o200k_base')  # Use an appropriate tokenizer
+tokenizer = tiktoken.get_encoding('o200k_base')
 
 def get_file_contents(filepath):
-    """Reads and returns the contents of a file, or notes its exclusion if it's a binary file."""
+    """Reads and returns the contents of a file with improved encoding handling."""
     try:
         if os.path.splitext(filepath)[1].lower() in EXCLUDED_EXTENSIONS:
             return "Excluded file type (binary/image)", 0
 
         with open(filepath, 'r', encoding='utf-8') as file:
             content = file.read()
-            tokens = len(tokenizer.encode(content))  # Calculate token count
+            tokens = len(tokenizer.encode(content))
             return content, tokens
     except Exception as e:
         return f"Error reading file {filepath}: {e}", 0
@@ -61,9 +66,20 @@ def collect_directory_mapping(startpath):
         traverse_directory(startpath, file)
 
 def generate_file_contents(startpath):
-    """Generates file contents wrapped in XML-like tags."""
-    with open('contents.txt', 'w', encoding='utf-8') as out_file:
+    """Generates file contents with progress indication."""
+    def count_files(path):
+        count = 0
+        for root, _, files in os.walk(path):
+            if os.path.basename(root) not in EXCLUDED_DIRECTORIES:
+                count += len(files)
+        return count
+
+    total_files = count_files(startpath)
+    processed = 0
+
+    with open('codebase.txt', 'w', encoding='utf-8') as out_file:
         def traverse_directory(root):
+            nonlocal processed
             try:
                 files = sorted(os.listdir(root))
                 for f in files:
@@ -72,13 +88,18 @@ def generate_file_contents(startpath):
                         if os.path.basename(file_path) not in EXCLUDED_DIRECTORIES:
                             traverse_directory(file_path)
                     else:
-                        content, _ = get_file_contents(file_path)
+                        content, tokens = get_file_contents(file_path)
                         filename = os.path.basename(file_path)
-                        out_file.write(f"<{filename}>\n{content}\n</{filename}>\n")
+                        out_file.write(f"<file path='{os.path.relpath(file_path, startpath)}' tokens='{tokens}'>\n")
+                        out_file.write(f"{content}\n")
+                        out_file.write(f"</file>\n")
+                        processed += 1
+                        print(f"Processing files... {processed}/{total_files}", end='\r')
             except Exception as e:
                 print(f"Error processing directory {root}: {e}")
 
         traverse_directory(startpath)
+        print("\nFile processing complete!")
 
 def generate_stats(directory_file, contents_file):
     """Generates a statistics file from directory and contents files."""
@@ -88,6 +109,7 @@ def generate_stats(directory_file, contents_file):
     total_tokens = 0
     ignored_files = set()
     all_files = set()
+    file_types = {}
 
     # Process directory file
     with open(directory_file, 'r', encoding='utf-8') as dir_file:
@@ -99,6 +121,8 @@ def generate_stats(directory_file, contents_file):
                 total_files += 1
                 filename = line.split('├── ')[1].strip()
                 all_files.add(filename)
+                ext = os.path.splitext(filename)[1].lower()
+                file_types[ext] = file_types.get(ext, 0) + 1
 
     # Process contents file
     processed_files = set()
@@ -107,17 +131,18 @@ def generate_stats(directory_file, contents_file):
         current_file = None
         file_lines = []
         for line in content_file:
-            if line.startswith('<') and line.endswith('>\n'):
+            if line.startswith('<file path='):
                 if inside_tag:
                     total_code_lines += len(file_lines)
                     total_tokens += len(tokenizer.encode(''.join(file_lines)))
                     processed_files.add(current_file)
-                current_file = line[1:-2]
+                current_file = line.split("path='")[1].split("'")[0]
                 file_lines = []
                 inside_tag = True
-            elif line.startswith(f'</{current_file}>'):
+            elif line.startswith('</file>'):
                 total_code_lines += len(file_lines)
                 total_tokens += len(tokenizer.encode(''.join(file_lines)))
+                processed_files.add(current_file)
                 inside_tag = False
             elif inside_tag:
                 file_lines.append(line)
@@ -132,14 +157,26 @@ def generate_stats(directory_file, contents_file):
 
     # Write statistics
     with open('stats.txt', 'w', encoding='utf-8') as stats_file:
+        stats_file.write("Project Statistics\n")
+        stats_file.write("=================\n\n")
         stats_file.write(f"Total files: {total_files}\n")
         stats_file.write(f"Total folders: {total_folders}\n")
         stats_file.write(f"Total code lines: {total_code_lines}\n")
         stats_file.write(f"Total tokens: {total_tokens}\n")
-        stats_file.write(f"Files ignored: {len(ignored_files)}\n")
+        stats_file.write(f"Files ignored: {len(ignored_files)}\n\n")
+        
+        stats_file.write("File Types Distribution\n")
+        stats_file.write("=====================\n")
+        for ext, count in sorted(file_types.items()):
+            if ext:
+                stats_file.write(f"{ext}: {count} files\n")
+            else:
+                stats_file.write(f"No extension: {count} files\n")
+        
         if ignored_files:
-            stats_file.write("Ignored files:\n")
-            for file in ignored_files:
+            stats_file.write("\nIgnored Files\n")
+            stats_file.write("============\n")
+            for file in sorted(ignored_files):
                 stats_file.write(f"- {file}\n")
 
 if __name__ == "__main__":
@@ -156,10 +193,11 @@ if __name__ == "__main__":
 
     # Generate file contents
     generate_file_contents(project_path)
-    print("File contents saved to 'contents.txt'.")
+    print("File contents saved to 'codebase.txt'.")
 
     # Generate statistics
-    generate_stats('directory.txt', 'contents.txt')
+    generate_stats('directory.txt', 'codebase.txt')
     print("Statistics saved to 'stats.txt'.")
 
     print("Process completed successfully!")
+
