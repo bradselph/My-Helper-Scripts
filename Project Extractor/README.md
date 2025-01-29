@@ -1,39 +1,82 @@
-### README.md (Updated)
-
 # Project Structure and Code Extractor
 
-This Python script automates the process of extracting directory structures, file contents, and generating statistics for a given project. It utilizes the `tiktoken` library to tokenize code and calculates statistics such as the total number of files, folders, lines of code, and tokens in the project.
+This Python script automates the process of extracting directory structures, file contents, and generating detailed statistics for a given project. It utilizes the `tiktoken` library for token counting and provides comprehensive project analysis.
 
 ## Features
-- **Directory Mapping**: Generates a tree-like structure of the project and saves it to `directory.txt`.
-- **File Content Extraction**: Reads and saves the contents of all files (excluding binaries and images) to `contents.txt` in an XML-like format.
-- **Statistics Generation**: Provides a summary of the project, including the number of files, folders, lines of code, and tokens in `stats.txt`.
+- **Directory Mapping**: Generates a tree-like structure of the project directory and saves it to `directory.txt`
+- **File Content Extraction**: Reads and saves the contents of all files (excluding binaries and images) to `codebase.txt` in an XML-like format
+- **Project Statistics**: Generates detailed project statistics including file counts, code lines, tokens, and file type distribution in `stats.txt`
+- **Progress Tracking**: Shows real-time progress during file processing
+- **Automatic Dependency Installation**: Automatically installs required packages if not present
 
-## Installation
-Before running the script, ensure that you have the `tiktoken` library installed. The script will attempt to install the library automatically if it's not present.
-
-```bash
-pip install tiktoken
-```
-
-Alternatively, run the script, and it will handle the installation for you.
+## Requirements
+The script will automatically install required packages:
+- `tiktoken`: For token counting
+- `tqdm`: For progress tracking
 
 ## Usage
-Run the script in the terminal and follow the prompts to enter your project name and path:
+Run the script in your terminal:
 
 ```bash
-python script_name.py
+python ProExtractor1.5.py
 ```
 
+Follow the prompts to enter:
+1. Project name
+2. Project directory path
+
 The script will generate three files:
-- **`directory.txt`**: The structure of the project directory.
-- **`contents.txt`**: The extracted contents of all files (in an XML-like format).
-- **`stats.txt`**: Statistics about the project (total files, folders, lines of code, and tokens).
+- `directory.txt`: Complete directory structure
+- `codebase.txt`: Extracted file contents in XML format
+- `stats.txt`: Detailed project statistics
 
-## Exclusions
-The following file types and directories are excluded from content extraction:
-- **File extensions**: `.exe`, `.dll`, `.bin`, `.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`, `.ico`, `.svg`
-- **Directories**: `.git`, `.github`, `.idea`
+## Excluded Content
+### File Extensions
+```
+.exe, .dll, .bin, .jpg, .jpeg, .png, .gif, .bmp, .ico, .svg, .pyc, .pyo
+```
 
-## License
-This project is licensed under the **GNU Affero General Public License v3.0**. See the [LICENSE](LICENSE) file for details.
+### Directories
+```
+.git, .github, .idea, __pycache__, node_modules, venv, env
+```
+
+## Output Format Examples
+
+### directory.txt
+```
+├── src/
+│   ├── main.py
+│   ├── utils/
+│   │   ├── helper.py
+```
+
+### codebase.txt
+```xml
+<file path='src/main.py'>
+[file contents here]
+</file>
+```
+
+### stats.txt
+```
+Project Statistics
+=================
+
+Total files: 100
+Total folders: 15
+Total code lines: 5000
+Total tokens: 25000
+Files ignored: 5
+
+File Types Distribution
+=====================
+.py: 45 files
+.js: 30 files
+.css: 25 files
+
+Ignored Files
+============
+- image.png
+- binary.exe
+```
