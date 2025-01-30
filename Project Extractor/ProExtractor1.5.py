@@ -4,7 +4,6 @@ import sys
 import tiktoken
 from tqdm import tqdm
 
-# Function to install a package using pip
 def install_package(package_name):
     """Installs a Python package using pip."""
     try:
@@ -14,7 +13,6 @@ def install_package(package_name):
         print(f"Failed to install {package_name}. Error: {e}")
         sys.exit(1)
 
-# Check for required packages
 required_packages = ['tiktoken', 'tqdm']
 for package in required_packages:
     try:
@@ -90,7 +88,7 @@ def generate_file_contents(startpath):
                     else:
                         content, tokens = get_file_contents(file_path)
                         filename = os.path.basename(file_path)
-                        out_file.write(f"<file path='{os.path.relpath(file_path, startpath)}' tokens='{tokens}'>\n")
+                        out_file.write(f"<file path='{os.path.relpath(file_path, startpath)}'>\n")
                         out_file.write(f"{content}\n")
                         out_file.write(f"</file>\n")
                         processed += 1
@@ -107,7 +105,7 @@ def generate_stats(directory_file, contents_file):
     total_folders = 0
     total_code_lines = 0
     total_tokens = 0
-    ignored_files = set()
+    processed_files = set()
     all_files = set()
     file_types = {}
 
@@ -122,10 +120,10 @@ def generate_stats(directory_file, contents_file):
                 filename = line.split('├── ')[1].strip()
                 all_files.add(filename)
                 ext = os.path.splitext(filename)[1].lower()
-                file_types[ext] = file_types.get(ext, 0) + 1
+                if ext not in EXCLUDED_EXTENSIONS:
+                    file_types[ext] = file_types.get(ext, 0) + 1
 
     # Process contents file
-    processed_files = set()
     with open(contents_file, 'r', encoding='utf-8') as content_file:
         inside_tag = False
         current_file = None
@@ -147,13 +145,12 @@ def generate_stats(directory_file, contents_file):
             elif inside_tag:
                 file_lines.append(line)
 
-        # Account for the last file if it wasn't closed properly
         if inside_tag:
             total_code_lines += len(file_lines)
             total_tokens += len(tokenizer.encode(''.join(file_lines)))
             processed_files.add(current_file)
 
-    ignored_files = list(all_files - processed_files)
+    excluded_files = {f for f in all_files if os.path.splitext(f)[1].lower() in EXCLUDED_EXTENSIONS}
 
     # Write statistics
     with open('stats.txt', 'w', encoding='utf-8') as stats_file:
@@ -161,22 +158,24 @@ def generate_stats(directory_file, contents_file):
         stats_file.write("=================\n\n")
         stats_file.write(f"Total files: {total_files}\n")
         stats_file.write(f"Total folders: {total_folders}\n")
-        stats_file.write(f"Total code lines: {total_code_lines}\n")
-        stats_file.write(f"Total tokens: {total_tokens}\n")
-        stats_file.write(f"Files ignored: {len(ignored_files)}\n\n")
-        
+        stats_file.write(f"Processed files: {len(processed_files)}\n")
+        stats_file.write(f"Total code lines: {total_code_lines:,}\n")
+        stats_file.write(f"Total tokens: {total_tokens:,}\n")
+        stats_file.write(f"Excluded files: {len(excluded_files)}\n\n")
         stats_file.write("File Types Distribution\n")
         stats_file.write("=====================\n")
         for ext, count in sorted(file_types.items()):
             if ext:
-                stats_file.write(f"{ext}: {count} files\n")
+                percentage = (count / len(processed_files)) * 100
+                stats_file.write(f"{ext}: {count:,} files ({percentage:.1f}%)\n")
             else:
-                stats_file.write(f"No extension: {count} files\n")
+                percentage = (count / len(processed_files)) * 100
+                stats_file.write(f"No extension: {count:,} files ({percentage:.1f}%)\n")
         
-        if ignored_files:
-            stats_file.write("\nIgnored Files\n")
-            stats_file.write("============\n")
-            for file in sorted(ignored_files):
+        if excluded_files:
+            stats_file.write("\nExcluded Files\n")
+            stats_file.write("=============\n")
+            for file in sorted(excluded_files):
                 stats_file.write(f"- {file}\n")
 
 if __name__ == "__main__":
