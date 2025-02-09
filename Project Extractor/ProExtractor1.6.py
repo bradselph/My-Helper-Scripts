@@ -13,6 +13,7 @@ def install_package(package_name):
         print(f"Failed to install {package_name}. Error: {e}")
         sys.exit(1)
 
+# Ensure required packages are installed
 required_packages = ['tiktoken', 'tqdm']
 for package in required_packages:
     try:
@@ -24,11 +25,9 @@ for package in required_packages:
 
 # Define file extensions to be excluded from content extraction
 EXCLUDED_EXTENSIONS = {'.exe', '.dll', '.bin', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.ico', '.svg', '.pyc', '.pyo'}
-EXCLUDED_DIRECTORIES = {'.git', '.github', '.idea', '__pycache__', 
-    'node_modules', 'venv', 'env'}
-    
+EXCLUDED_DIRECTORIES = {'.git', '.github', '.idea', '__pycache__', 'node_modules', 'venv', 'env'}
 
-# Initialize tokenizer from tiktoken library
+# Initialize tokenizer
 tokenizer = tiktoken.get_encoding('o200k_base')
 
 def get_file_contents(filepath):
@@ -44,7 +43,7 @@ def get_file_contents(filepath):
     except Exception as e:
         return f"Error reading file {filepath}: {e}", 0
 
-def collect_directory_mapping(startpath):
+def collect_directory_mapping(startpath, output_file):
     """Collects directory mapping of the project."""
     def traverse_directory(root, file, level=0):
         try:
@@ -60,10 +59,10 @@ def collect_directory_mapping(startpath):
         except Exception as e:
             print(f"Error processing directory {root}: {e}")
 
-    with open('directory.txt', 'w', encoding='utf-8') as file:
+    with open(output_file, 'w', encoding='utf-8') as file:
         traverse_directory(startpath, file)
 
-def generate_file_contents(startpath):
+def generate_file_contents(startpath, output_file):
     """Generates file contents with progress indication."""
     def count_files(path):
         count = 0
@@ -75,7 +74,7 @@ def generate_file_contents(startpath):
     total_files = count_files(startpath)
     processed = 0
 
-    with open('codebase.txt', 'w', encoding='utf-8') as out_file:
+    with open(output_file, 'w', encoding='utf-8') as out_file:
         def traverse_directory(root):
             nonlocal processed
             try:
@@ -99,7 +98,7 @@ def generate_file_contents(startpath):
         traverse_directory(startpath)
         print("\nFile processing complete!")
 
-def generate_stats(directory_file, contents_file):
+def generate_stats(directory_file, contents_file, output_file):
     """Generates a statistics file from directory and contents files."""
     total_files = 0
     total_folders = 0
@@ -153,7 +152,7 @@ def generate_stats(directory_file, contents_file):
     excluded_files = {f for f in all_files if os.path.splitext(f)[1].lower() in EXCLUDED_EXTENSIONS}
 
     # Write statistics
-    with open('stats.txt', 'w', encoding='utf-8') as stats_file:
+    with open(output_file, 'w', encoding='utf-8') as stats_file:
         stats_file.write("Project Statistics\n")
         stats_file.write("=================\n\n")
         stats_file.write(f"Total files: {total_files}\n")
@@ -165,13 +164,9 @@ def generate_stats(directory_file, contents_file):
         stats_file.write("File Types Distribution\n")
         stats_file.write("=====================\n")
         for ext, count in sorted(file_types.items()):
-            if ext:
-                percentage = (count / len(processed_files)) * 100
-                stats_file.write(f"{ext}: {count:,} files ({percentage:.1f}%)\n")
-            else:
-                percentage = (count / len(processed_files)) * 100
-                stats_file.write(f"No extension: {count:,} files ({percentage:.1f}%)\n")
-        
+            percentage = (count / len(processed_files)) * 100 if processed_files else 0
+            stats_file.write(f"{ext if ext else 'No extension'}: {count:,} files ({percentage:.1f}%)\n")
+
         if excluded_files:
             stats_file.write("\nExcluded Files\n")
             stats_file.write("=============\n")
@@ -186,17 +181,12 @@ if __name__ == "__main__":
 
     print(f"\nProcessing project '{project_name}' located at '{project_path}'...")
 
-    # Generate directory mapping
-    collect_directory_mapping(project_path)
-    print("Directory mapping saved to 'directory.txt'.")
+    directory_file = f"{project_name}-directory.txt"
+    codebase_file = f"{project_name}-codebase.txt"
+    stats_file = f"{project_name}-stats.txt"
 
-    # Generate file contents
-    generate_file_contents(project_path)
-    print("File contents saved to 'codebase.txt'.")
+    collect_directory_mapping(project_path, directory_file)
+    generate_file_contents(project_path, codebase_file)
+    generate_stats(directory_file, codebase_file, stats_file)
 
-    # Generate statistics
-    generate_stats('directory.txt', 'codebase.txt')
-    print("Statistics saved to 'stats.txt'.")
-
-    print("Process completed successfully!")
-
+    print(f"\nProcess completed! Output files: {directory_file}, {codebase_file}, {stats_file}")
